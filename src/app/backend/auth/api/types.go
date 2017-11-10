@@ -65,6 +65,7 @@ func (self AuthenticationMode) String() string {
 const (
 	Token AuthenticationMode = "token"
 	Basic AuthenticationMode = "basic"
+	OIDC  AuthenticationMode = "oidc"
 )
 
 // AuthManager is used for user authentication management.
@@ -115,6 +116,35 @@ type LoginSpec struct {
 	// KubeConfig is the content of users' kubeconfig file. It will be parsed and auth data will be extracted.
 	// Kubeconfig can not contain any paths. All data has to be provided within the file.
 	KubeConfig string `json:"kubeConfig"`
+	// IdProvider is the unique id provider config in server.
+	IdProvider IdProvider `json:"idProvider"`
+}
+
+type IdProvider struct {
+	Name  string `json:"name"`
+	Code  string `json:"code"`
+	State string `json:"state"`
+}
+
+// OIDCConfig is the oidc config.
+type OIDCConfig struct {
+	// IssuerURL is the URL the provider signs ID Tokens as. This will be the "iss"
+	// field of all tokens produced by the provider and is used for configuration
+	// discovery.
+	IssuerURL string `json:"issuerURL"`
+	// ClientID value for the client, which is OAuth 2.0 Client Identifier valid
+	// at the Authorization Server.
+	ClientID string `json:"clientID"`
+	// ClientSecret secret for the client, which is OAuth 2.0 Client Secret valid
+	// at the Authorization Server.
+	ClientSecret string `json:"clientSecret"`
+	// Scopes is the authorization and token endpoints allow the client to specify the
+	// scope of the access request, which must include 'openid'.
+	Scopes []string `json:"scopes"`
+	// Path to a PEM encoded root certificate of the provider.
+	CAFile string `json:"caFile"`
+	// RedirectURL is the url this kubernetes-dashbord served.
+	RedirectURL string `json:"redirectURL"`
 }
 
 // AuthResponse is returned from our backend as a response for login/refresh requests. It contains generated JWEToken
@@ -124,6 +154,8 @@ type AuthResponse struct {
 	JWEToken string `json:"jweToken"`
 	// Errors are a list of non-critical errors that happened during login request.
 	Errors []error `json:"errors"`
+	//
+	RedirectURL string `json:"redirectURL"`
 }
 
 // TokenRefreshSpec contains token that is required by token refresh operation.

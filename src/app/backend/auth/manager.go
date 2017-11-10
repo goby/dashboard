@@ -78,6 +78,8 @@ func (self authManager) getAuthenticator(spec *authApi.LoginSpec) (authApi.Authe
 		return NewBasicAuthenticator(spec), nil
 	case len(spec.KubeConfig) > 0:
 		return NewKubeConfigAuthenticator(spec, self.authenticationModes), nil
+	case (len(spec.IdProvider.Name) > 0 || len(spec.IdProvider.Code) > 0) && self.authenticationModes.IsEnabled(authApi.OIDC):
+		return NewIdProviderAuthenticator(spec), nil
 	}
 
 	return nil, errors.New("Not enough data to create authenticator.")

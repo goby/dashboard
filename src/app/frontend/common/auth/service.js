@@ -30,11 +30,12 @@ export class AuthService {
    * @param {string} kdTokenCookieName
    * @param {string} kdTokenHeaderName
    * @param {string} kdCsrfTokenHeader
+   * @param {!./service.AuthOIDCService} kdAuthOIDCService
    * @ngInject
    */
   constructor(
       $cookies, $transitions, kdCsrfTokenService, $log, $state, $q, $resource, kdTokenCookieName,
-      kdTokenHeaderName, kdCsrfTokenHeader) {
+      kdTokenHeaderName, kdCsrfTokenHeader, kdAuthOIDCService) {
     /** @private {!angular.$cookies} */
     this.cookies_ = $cookies;
     /** @private {!kdUiRouter.$transitions} */
@@ -57,6 +58,8 @@ export class AuthService {
     this.csrfHeaderName_ = kdCsrfTokenHeader;
     /** @private {string} */
     this.skipLoginPageCookieName_ = 'skipLoginPage';
+    /** $private {!./oidc_service.AuthOIDCService} */
+    this.oidcService_ = kdAuthOIDCService
   }
 
   /**
@@ -66,6 +69,7 @@ export class AuthService {
   setTokenCookie_(token) {
     // This will only work for HTTPS connection
     this.cookies_.put(this.tokenCookieName_, token, {secure: true});
+    this.cookies_.put(this.tokenCookieName_, token, {secure: false});
     // This will only work when accessing Dashboard at 'localhost' or '127.0.0.1'
     this.cookies_.put(this.tokenCookieName_, token, {domain: 'localhost'});
     this.cookies_.put(this.tokenCookieName_, token, {domain: '127.0.0.1'});
@@ -91,10 +95,11 @@ export class AuthService {
    * Sends a login request to the backend with filled in login spec structure.
    *
    * @param {!backendApi.LoginSpec} loginSpec
+   * @param {!angular.$q.Deferred} deferred
    * @return {!angular.$q.Promise}
    */
-  login(loginSpec) {
-    let deferred = this.q_.defer();
+  login(loginSpec, deferred) {
+    deferred = deferred || this.q_.defer();
 
     /** @type {!angular.$q.Promise} */
     let csrfTokenPromise = this.csrfTokenService_.getTokenForAction('login');
@@ -112,6 +117,14 @@ export class AuthService {
           resource.save(
               loginSpec,
               (/** @type {!backendApi.AuthResponse} */ response) => {
+                // redirect if required
+                if (response.redirectURL.length !== 0) {
+                  this.oidcService_.login(response.redirectURL).then(
+                    (data) => {return this.login(data, deferred);},
+                    (err) => {deferred.reject(err);}
+                  );
+                  return;
+                }
                 if (response.jweToken.length !== 0 && response.errors.length === 0) {
                   this.setTokenCookie_(response.jweToken);
                 }
@@ -305,5 +318,91 @@ export class AuthService {
     this.transitions_.onBefore({to: requiresAuth}, () => {
       return this.refreshToken();
     });
+  }
+}
+
+/** @final */
+export class AuthOIDCService {
+  /**
+   * @param {!angular.$window} $window
+   * @param {!angular.$cookies} $cookies
+   * @param {!angular.$interval} $interval
+   * @param {!md.$dialog} $mdDialog
+   * @param {!angular.$q} $q
+   * @ngInject
+   */
+  constructor(
+      $window, $cookies, $interval, $mdDialog, $log, $q) {
+    /** @private {!angular.$window} */
+    this.window_ = $window;
+    /** @private {!angular.$cookies} */
+    this.cookies_ = $cookies;
+    /** @private {!angular.$interval} */
+    this.interval_ = $interval;
+    /** @private {!md.$dialog} */
+    this.mdDialog_ = $mdDialog;
+    /** @private {!angular.$log} */
+    this.log_ = $log;
+    /** @private {!angular.$q} */
+    this.q_ = $q;
+    /** @private {string} */
+    this.oidcAuthWindowName_ = 'OpenIDConnect';
+  }
+
+  /**
+   * Sends a login request to external id provider with redirect url and callback
+   * function.
+   *
+   * @param {string} url
+   * @return {!angular.$q.Promise}
+   */
+  login(url) {
+    let $scope = {};
+    let deferred = this.q_.defer();
+    $scope.v = this.window_.open(url, this.oidcAuthWindowName_,
+        `menubar=no,
+        location=yes,
+        resizable=no,
+        scrollbars=no,
+        status=no`)
+    $scope.query = (loc, name) => {
+      let vars = loc.search.substring(1).split('&');;
+      let result;
+      angular.forEach(vars, function(value) {
+        let pair = value.split('=');
+        if (decodeURIComponent(pair[0]) == name) {
+          result = decodeURIComponent(pair[1]);
+          return false;
+        }
+      });
+      return result;
+    };
+    let host = this.window_.location.host;
+    let success = false;
+    // Check user login ok or not repeatly
+    let check = this.interval_(function(){
+      try {
+        if ($scope.v.closed) {
+          $scope.stopCheck();
+        } else if ($scope.v.location.host == host && $scope.v.location.href.indexOf("/api/v1/login/oidc")) {
+          success = true;
+          $scope.stopCheck();
+        }
+      } catch(_) { }
+    }, 1000);
+    // reject by cancelled
+    check.then(null, ()=>{
+      success && deferred.resolve({
+        idProvider: {
+          code: $scope.query($scope.v.location, "code"),
+          state: $scope.query($scope.v.location, "state"),
+        }
+      });
+      $scope.v.close();
+    }).catch((err) => {console.log("cancel checked: ", err); deferred.reject(err);});
+    $scope.stopCheck = () => {
+      this.interval_.cancel(check);
+    }
+    return deferred.promise;
   }
 }

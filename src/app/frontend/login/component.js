@@ -26,6 +26,8 @@ const Modes = {
   TOKEN: 'token',
   /** @export {!backendApi.AuthenticationMode} */
   BASIC: 'basic',
+  /** @export {!backendApi.AuthenticationMode} */
+  OIDC: 'oidc',
 };
 
 /** @final */
@@ -109,6 +111,7 @@ class LoginController {
     this.loginSpec.password = this.getValue_(this.loginSpec.password, loginSpec.password);
     this.loginSpec.token = this.getValue_(this.loginSpec.token, loginSpec.token);
     this.loginSpec.kubeConfig = this.getValue_(this.loginSpec.kubeConfig, loginSpec.kubeConfig);
+    this.loginSpec.idProvider.name = this.getValue_(this.loginSpec.idProvider.name, loginSpec.idProvider.name);
   }
 
   /**
