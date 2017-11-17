@@ -14,7 +14,7 @@
 
 import csrftokenModule from '../csrftoken/module';
 import {AuthInterceptor} from './interceptor';
-import {AuthService} from './service';
+import {AuthService, AuthOIDCService} from './service';
 
 /**
  * Angular module containing auth configuration.
@@ -24,11 +24,13 @@ export default angular
         'kubernetesDashboard.auth',
         [
           'ngCookies',
+          'ngMaterial',
           'ngResource',
           'ui.router',
           csrftokenModule.name,
         ])
     .service('kdAuthService', AuthService)
+    .service('kdAuthOIDCService', AuthOIDCService)
     .factory('kdAuthInterceptor', AuthInterceptor.NewAuthInterceptor)
     .config(initAuthInterceptor)
     .constant('kdTokenCookieName', 'jweToken')

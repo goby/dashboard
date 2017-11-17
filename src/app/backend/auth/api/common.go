@@ -34,6 +34,17 @@ func ToAuthenticationModes(modes []string) AuthenticationModes {
 	return result
 }
 
+// RedirectRequiredError indicates that a call that required redirect.
+// TODO: current login machinism hard to add multi-stage login like oidc.
+// So how dirty work this is.
+type RedirectRequiredError struct {
+	RedirectURL string
+}
+
+func (r *RedirectRequiredError) Error() string {
+	return "redirect to " + r.RedirectURL
+}
+
 // ShouldRejectRequest returns true if url contains name and namespace of resource that should be filtered out from
 // dashboard.
 func ShouldRejectRequest(url string) bool {

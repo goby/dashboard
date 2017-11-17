@@ -21,7 +21,9 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/kubernetes/dashboard/src/app/backend/auth"
@@ -62,6 +64,21 @@ var (
 	argMetricClientCheckPeriod  = pflag.Int("metric-client-check-period", 30, "Time in seconds that defines how often configured metric client health check should be run. Default: 30 seconds.")
 	argAutoGenerateCertificates = pflag.Bool("auto-generate-certificates", false, "When set to true, Dashboard will automatically generate certificates used to serve HTTPS. Default: false.")
 	argEnableInsecureLogin      = pflag.Bool("enable-insecure-login", false, "When enabled, Dashboard login view will also be shown when Dashboard is not served over HTTPS. Default: false.")
+	// oidc related
+	argOIDCIssuerURL = pflag.String("oidc-issuer-url", "", "The URL of the OpenID issuer, "+
+		"only HTTPS scheme will be accepted. If set, it will be used to verify the OIDC JSON Web Token (JWT).")
+	argOIDCClientID = pflag.String("oidc-client-id", "", "The client ID for the OpenID "+
+		"Connect client, must be set if oidc-issuer-url is set.")
+	argOIDCClientSecret = pflag.String("oidc-client-secret", "", "The client secret for "+
+		"the OpenID Connect client, must be set if oidc-issuer-url is set.")
+	argOIDCScopes = pflag.String("oidc-scopes", "openid", "The scope for the OpenID Connect "+
+		"Provider provided, seperated by comma. 'openid' will be auto inserted if not set.")
+	argOIDCCAFile = pflag.String("oidc-ca-file", "", "If set, the OpenID server's certificate "+
+		"will be verified by one of the authorities in the oidc-ca-file, "+
+		"otherwise the host's root CA set will be used.")
+	argDashboardHost = pflag.String("dashboard-host", "", "The service host of the dashboard serving in format of"+
+		"protocol://address:port, e.g., https://dashboard.example.com. The 'redirect_url' will be <dashboard-host>/api/v1/login/oidc, e.g., "+
+		"https://dashboard.example.com/api/v1/login/oidc. Must be set if oidc-issuer-url is set.")
 )
 
 func main() {
@@ -163,7 +180,59 @@ func initAuthManager(clientManager client.ClientManager, tokenTTL time.Duration)
 		authModes.Add(authApi.Token)
 	}
 
+	// Setup oidc
+	if *argOIDCIssuerURL != "" {
+		authModes.Add(authApi.OIDC)
+
+		oidcConfig := &authApi.OIDCConfig{
+			IssuerURL:    *argOIDCIssuerURL,
+			ClientID:     *argOIDCClientID,
+			ClientSecret: *argOIDCClientSecret,
+			CAFile:       *argOIDCCAFile,
+			RedirectURL:  strings.Trim(*argDashboardHost, "/") + "/api/v1/login/oidc",
+		}
+
+		if *argOIDCScopes == "" {
+			oidcConfig.Scopes = []string{}
+		} else {
+			oidcConfig.Scopes = strings.Split(*argOIDCScopes, ",")
+		}
+
+		if err := validateOIDCConfig(oidcConfig); err != nil {
+			log.Fatalf("Error while initializing OpenID Connect. Reason: %s", err)
+		}
+
+		if err := auth.SetupOIDCProvider(oidcConfig); err != nil {
+			log.Fatalf("setup oidc failed: %#v", err)
+		}
+	}
+
 	return auth.NewAuthManager(clientManager, tokenManager, authModes)
+}
+
+func validateOIDCConfig(config *authApi.OIDCConfig) error {
+	var findOpenId bool
+	for _, s := range config.Scopes {
+		if s == "openid" {
+			findOpenId = true
+			break
+		}
+	}
+	if !findOpenId {
+		config.Scopes = append(config.Scopes, "openid")
+	}
+
+	if config.ClientID == "" {
+		return fmt.Errorf("the oidc-issuer-url is set to %s but missing oidc-client-id.", config.IssuerURL)
+	}
+	if config.ClientSecret == "" {
+		return fmt.Errorf("the oidc-issuer-url is set to %s but missing oidc-client-secret.", config.IssuerURL)
+	}
+	if _, err := url.Parse(config.RedirectURL); err != nil {
+		return fmt.Errorf("the oidc-issuer-url is set to %s but dashboard-host is invalid: %s", config.IssuerURL, err)
+	}
+
+	return nil
 }
 
 /**

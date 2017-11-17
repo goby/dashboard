@@ -1484,10 +1484,20 @@ backendApi.CsrfToken;
 
 /**
  * @typedef {{
+ *   name: string,
+ *   code: string,
+ *   state: string
+ * }}
+ */
+backendApi.IdProvider;
+
+/**
+ * @typedef {{
  *   username: string,
  *   password: string,
  *   token: string,
  *   kubeConfig: string,
+ *   idProvider: !backendApi.IdProvider,
  * }}
  */
 backendApi.LoginSpec;
@@ -1495,6 +1505,7 @@ backendApi.LoginSpec;
 /**
  * @typedef {{
  *   jweToken: string,
+ *   redirectURL: string,
  *   errors: !Array<!backendApi.Error>
  * }}
  */
@@ -1530,6 +1541,7 @@ backendApi.LoginModesResponse;
  * @typedef {{
  *  TOKEN: !backendApi.AuthenticationMode,
  *  BASIC: !backendApi.AuthenticationMode,
+ *  OIDC:  !backendApi.AuthenticationMode,
  *  }}
  */
 backendApi.SupportedAuthenticationModes;

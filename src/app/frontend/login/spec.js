@@ -18,7 +18,8 @@ export default class LoginSpec {
   constructor({username = '',
                password = '',
                token = '',
-               kubeConfig = ''} = {username: '', password: '', token: '', kubeConfig: ''}) {
+               kubeConfig = '',
+               idProvider = {name: '', state: '', code: ''}} = {username: '', password: '', token: '', kubeConfig: '', idProvider: {name: '', state: '', code: ''}}) {
     /** @export {string} */
     this.username = username;
     /** @export {string} */
@@ -27,5 +28,7 @@ export default class LoginSpec {
     this.token = token;
     /** @export {string} */
     this.kubeConfig = kubeConfig;
+    /** @export {!backendApi.IdProvider} */
+    this.idProvider = idProvider;
   }
 }

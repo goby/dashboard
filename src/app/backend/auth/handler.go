@@ -37,6 +37,10 @@ func (self AuthHandler) Install(ws *restful.WebService) {
 			Reads(authApi.LoginSpec{}).
 			Writes(authApi.AuthResponse{}))
 	ws.Route(
+		ws.GET("/login/oidc").
+			To(self.handleLoginOidc).
+			Writes(""))
+	ws.Route(
 		ws.GET("/login/status").
 			To(self.handleLoginStatus).
 			Writes(validation.LoginStatus{}))
@@ -61,12 +65,23 @@ func (self AuthHandler) handleLogin(request *restful.Request, response *restful.
 
 	loginResponse, err := self.manager.Login(loginSpec)
 	if err != nil {
-		response.AddHeader("Content-Type", "text/plain")
-		response.WriteErrorString(http.StatusInternalServerError, err.Error()+"\n")
-		return
+		if r, ok := err.(*authApi.RedirectRequiredError); ok {
+			loginResponse = &authApi.AuthResponse{
+				RedirectURL: r.RedirectURL,
+			}
+		} else {
+			response.AddHeader("Content-Type", "text/plain")
+			response.WriteErrorString(http.StatusInternalServerError, err.Error()+"\n")
+			return
+		}
 	}
 
 	response.WriteHeaderAndEntity(http.StatusOK, loginResponse)
+}
+
+func (self AuthHandler) handleLoginOidc(request *restful.Request, response *restful.Response) {
+	response.AddHeader("Content-Type", "text/plain")
+	return
 }
 
 func (self *AuthHandler) handleLoginStatus(request *restful.Request, response *restful.Response) {
